@@ -1,10 +1,7 @@
 package com.happyplus.adbshell;
 
-import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
-
-import androidx.annotation.RequiresApi;
 
 import com.tananaev.adblib.AdbBase64;
 import com.tananaev.adblib.AdbConnection;

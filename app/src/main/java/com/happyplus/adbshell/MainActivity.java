@@ -1,40 +1,28 @@
 package com.happyplus.adbshell;
 
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
-
-import com.tananaev.adblib.AdbBase64;
-import com.tananaev.adblib.AdbConnection;
-import com.tananaev.adblib.AdbCrypto;
-import com.tananaev.adblib.AdbStream;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.Socket;
-import java.security.NoSuchAlgorithmException;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static String TAG = "HAPPYPLUS";
 
-    private App app;
-    private ADB adb;
-    private static Boolean running = false;
     private Button btn;
 
     private EditText addressEdit;
     private EditText portEdit;
+
+    private Intent foregroundIntent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,79 +31,96 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences sharedPreferences = getSharedPreferences("AdbShell", Context.MODE_PRIVATE);
 
+        // 前台服务
+        foregroundIntent = new Intent(MainActivity.this, ForegroundService.class);
+
         addressEdit = findViewById(R.id.address);
         String address = sharedPreferences.getString("ADDRESS", "");
-        Log.d("HAPPYPLUS", address);
+        Log.d(TAG, address);
         if (!address.isEmpty()) {
             addressEdit.setText(address);
         }
 
         portEdit = findViewById(R.id.port);
         int port = sharedPreferences.getInt("PORT", 0);
-        Log.d("HAPPYPLUS", Integer.toString(port));
+        Log.d(TAG, Integer.toString(port));
         if (port != 0) {
             portEdit.setText(Integer.toString(port));
         }
-
-        // 初始化ADB
-        adb = new ADB(getFilesDir());
 
         // 连接adb
         btn = findViewById(R.id.btn);
         btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (!running) {
+                if (ForegroundService.STATUS.equals("STOP")) {
                     btn.setText("启动中");
                     btn.setEnabled(false);
-                    SharedPreferences.Editor editor = sharedPreferences.edit();//获取编辑器
-                    editor.putString("ADDRESS", addressEdit.getText().toString());
-                    editor.putInt("PORT", Integer.parseInt(portEdit.getText().toString()));
-                    editor.commit();//提交修改
-                    start();
+                    String ADDRESS = addressEdit.getText().toString();
+                    int PORT = Integer.parseInt(portEdit.getText().toString());
+                    // 保存配置
+                    SharedPreferences.Editor editor = sharedPreferences.edit();
+                    editor.putString("ADDRESS", ADDRESS);
+                    editor.putInt("PORT", PORT);
+                    editor.commit();
+                    // 传参给前台服务
+                    foregroundIntent.putExtra("ADDRESS", ADDRESS);
+                    foregroundIntent.putExtra("PORT", PORT);
+                    foregroundIntent.setAction("RUN");
                 } else {
-                    stop();
+                    foregroundIntent.setAction("STOP");
+                    btn.setText("停止中");
+                    btn.setEnabled(false);
+                }
+                // 启动
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(foregroundIntent);
+                } else {
+                    startService(foregroundIntent);
                 }
             }
         });
-    }
 
-    private void start() {
+        // 获取服务状态
+        Log.e(TAG, "ForeService:" + ForegroundService.STATUS);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Boolean ret = adb.adbConnect(addressEdit.getText().toString(), Integer.parseInt(portEdit.getText().toString()));
-                if (ret) {
-                    app = App.main(adb);
+                while (true) {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            btn.setText("停止");
-                            running = true;
-                            Toast.makeText(MainActivity.this, "服务已启动", Toast.LENGTH_LONG).show();
-                            btn.setEnabled(true);
+                            refreshStatus();
                         }
                     });
-                } else {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            running = false;
-                            Toast.makeText(MainActivity.this, "ADB连接失败", Toast.LENGTH_LONG).show();
-                        }
-                    });
+                    try {
+                        Thread.sleep(3000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }).start();
+
     }
 
-    private void stop() {
-        Log.e("HAPPYPLUS", "断开adb");
-        adb.disconnectAdb();
-        app.stop();
-        running = false;
-        btn.setText("启动");
-        Toast.makeText(MainActivity.this, "关闭服务", Toast.LENGTH_LONG).show();
+    private void refreshStatus() {
+        if (ForegroundService.STATUS.equals("RUNNING")) {
+            btn.setText("停止");
+            btn.setEnabled(true);
+        }
+        if (ForegroundService.STATUS.equals("STOP")) {
+            btn.setText("启动");
+            btn.setEnabled(true);
+        }
+        if (ForegroundService.STATUS.equals("START")) {
+            btn.setText("启动中");
+            btn.setEnabled(false);
+        }
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+    }
 }
