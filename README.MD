@@ -22,5 +22,5 @@ curl --location --request POST 'http://localhost:8999' \
 
 ```shell
 # Auto.js
-http.postJson('http://localhost:8999', 'input tap 500 500')
+http.post('http://localhost:8999', 'input tap 540 277', { contentType: 'text/plain' })
 ```

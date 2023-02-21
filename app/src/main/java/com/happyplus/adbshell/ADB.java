@@ -55,26 +55,40 @@ public class ADB {
 
     public String ExecCommand(String command) {
         try {
-            AdbStream stream = connection.open("shell:" + command);
-            while (!stream.isClosed()) try {
-                String res = new String(stream.read(), "US-ASCII");
-                Log.e("HAPPYPLUS", res);
-            } catch (UnsupportedEncodingException e) {
+            final AdbStream adbStream;
+            try {
+                adbStream = connection.open("shell:");
+            } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
                 return e.getMessage();
-            } catch (InterruptedException e) {
+            }
+            // Start the receiving thread
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    while (!adbStream.isClosed())
+                        try {
+                            // Print each thing we read from the shell stream
+                            Log.d("ADB OUTPUT", new String(adbStream.read(), "US-ASCII"));
+                        } catch (InterruptedException | IOException e) {
+                            e.printStackTrace();
+                            return;
+                        }
+                }
+            }).start();
+            try {
+                adbStream.write(command + '\n');
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
-                return e.getMessage();
-            } catch (IOException e) {
-                e.printStackTrace();
+                Log.e(TAG, "ExecCommand Error " + e.getMessage());
                 return e.getMessage();
             }
         } catch (Exception e) {
             String res = e.toString();
-            Log.e("HAPPYPULS", "SHELL FAILED: " + e.toString());
-            return  res;
+            Log.e("HAPPYPULS", "SHELL FAILED: " + e);
+            return res;
         }
-        return "成功";
+        return "ok";
     }
 
     public Boolean adbConnect(String host, int port) {
@@ -88,7 +102,7 @@ public class ADB {
         } catch (IOException | InterruptedException e) {
             String res = e.toString();
             Log.e("HAPPYPLUS", res);
-           return false;
+            return false;
         }
     }
 
